@@ -14,6 +14,31 @@ connectDB();
 app.use(cors());
 app.use(express.json());
 
+/**
+ *   --- Admin Authentication Middleware (Secret Key) ---
+ * -----------------------------------------------
+*/
+const adminAuth = (req, res, next) => {
+  const adminKey = req.headers['x-admin-key'];
+  
+  if (!adminKey) {
+    return res.status(401).json({ 
+      success: false, 
+      error: 'Access denied: No admin key provided' 
+    });
+  }
+
+  if (adminKey !== process.env.ADMIN_SECRET_KEY) {
+    return res.status(403).json({ 
+      success: false, 
+      error: 'Access denied: Invalid admin key' 
+    });
+  }
+
+  next(); // Key is valid, proceed to route
+};
+// -----------------------------------------------
+
 
 /**
  *   --- Validation Schemas (Joi) ---
@@ -34,7 +59,6 @@ const applicationSchema = Joi.object({
   resume_link: Joi.string().uri().required(),
   cover_note: Joi.string().required().min(5)
 });
-
 // -----------------------------------------------
 
 
@@ -64,7 +88,6 @@ app.get('/api/jobs', async (req, res) => {
     res.status(500).json({ success: false, error: 'Server Error' });
   }
 });
-
 // -----------------------------------------------
 
 
@@ -83,7 +106,85 @@ app.get('/api/jobs/:id', async (req, res) => {
     res.status(500).json({ success: false, error: 'Server Error' });
   }
 });
+// -----------------------------------------------
 
+
+/**
+ *   POST /api/jobs - Create a job (Admin) 
+ *   PROTECTED: Requires x-admin-key header
+ * -----------------------------------------------
+*/
+app.post('/api/jobs', adminAuth, async (req, res) => {
+  // Validate Input
+  const { error } = jobSchema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ success: false, error: error.details[0].message });
+  }
+
+  try {
+    const job = await Job.create(req.body);
+    res.status(201).json({ success: true, data: job });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to create job' });
+  }
+});
+// -----------------------------------------------
+
+
+/**
+ *    DELETE /api/jobs/:id - Delete a job (Admin) 
+ *    PROTECTED: Requires x-admin-key header
+ * -----------------------------------------------
+*/
+app.delete('/api/jobs/:id', adminAuth, async (req, res) => {
+  try {
+    const job = await Job.findByIdAndDelete(req.params.id);
+    if (!job) {
+      return res.status(404).json({ success: false, error: 'Job not found' });
+    }
+    // Optional: Cascade delete applications associated with this job
+    await Application.deleteMany({ job: req.params.id });
+    
+    res.status(200).json({ success: true, message: 'Job deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to delete job' });
+  }
+});
+// -----------------------------------------------
+
+
+/**
+ *  POST /api/applications - Submit job application
+ *  PUBLIC: No auth required
+ * -----------------------------------------------
+*/
+app.post('/api/applications', async (req, res) => {
+  // Validate Input
+  const { error } = applicationSchema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ success: false, error: error.details[0].message });
+  }
+
+  try {
+    // Check if job already exists
+    const jobExists = await Job.findById(req.body.job_id);
+    if (!jobExists) {
+      return res.status(404).json({ success: false, error: 'Job not found' });
+    }
+
+    const application = await Application.create({
+      job: req.body.job_id,
+      name: req.body.name,
+      email: req.body.email,
+      resume_link: req.body.resume_link,
+      cover_note: req.body.cover_note
+    });
+
+    res.status(201).json({ success: true, data: application });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to submit application' });
+  }
+});
 // -----------------------------------------------
 
 
@@ -92,4 +193,5 @@ app.get('/api/jobs/:id', async (req, res) => {
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
+  console.log(`Admin Protection: ${process.env.ADMIN_SECRET_KEY ? 'ACTIVE' : 'MISSING KEY'}`);
 });
