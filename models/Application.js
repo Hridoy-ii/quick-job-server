@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const applicationSchema = new mongoose.Schema({
   job: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Job', // References the string name 'Job', does not recompile it
+    ref: 'Job', 
     required: true
   },
   name: {
@@ -30,5 +30,6 @@ const applicationSchema = new mongoose.Schema({
   }
 });
 
-// Register ONLY the Application model here
+
+
 module.exports = mongoose.model('Application', applicationSchema);

@@ -32,5 +32,5 @@ const jobSchema = new mongoose.Schema({
   }
 });
 
-// This line registers the model. It must only happen once per runtime.
+
 module.exports = mongoose.model('Job', jobSchema);
